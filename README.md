@@ -3,7 +3,7 @@ IMCTFD: Improved Microchip CAN Teensy FlexData Library (MCP2517FD)
 
   Welcome to IMCTFD!
 
-    This library was developed based on IFCT, libraries developed for and used on the Teensy 3.x platform.
+  This library was developed based on IFCT, libraries developed for and used on the Teensy 3.x platform.
 There are several benefits that are not even covered in the current Microchip API, or any other libraries.
 
 1) The library uses teensyThreads by ftrias (https://github.com/ftrias/TeensyThreads)
@@ -34,6 +34,10 @@ TXQ can be transmitten to using the Obj.write(msg, TXQ) specifically, otherwise 
 12) automatic DLC calculations! Don't worry about not knowing the DLC (15 == 64 bytes, 9 == 12 bytes). Just assign your data length (msg.len) and if your length is smaller than the calculated next DLC it will be padded with 0xAA bytes.
 
 13) dynamic read(msg)/write(msg) assure you write to a properly sized FIFO. If you're data can't fit in a FIFO because you have it set to use a smaller payload size to get more deep queues, it will scan to the next available FIFO for validation.
+
+14) enhanced filtering! Tired of frames bleeding in when using multiple IDs or ranges? The library will get rid of unwanted frames that came in when enhancement is enabled.
+
+15) message distribution!, 2 or more callback filters have similar IDs that come in? Due to limitation of controller, only first FIFO to catch it gets it, meaning, your other callback will not trigger. Message distributions overcomes this limitation by duplicating messages to all callbacks with matching filters, and if you have enhancements enabled, distributions will abide by those set enhancements to ensure a wanted frame is accepted and not others.
 
   Typical usage:
 ```
