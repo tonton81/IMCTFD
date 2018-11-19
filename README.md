@@ -39,6 +39,8 @@ TXQ can be transmitten to using the Obj.write(msg, TXQ) specifically, otherwise 
 
 15) message distribution!, 2 or more callback filters have similar IDs that come in? Due to limitation of controller, only first FIFO to catch it gets it, meaning, your other callback will not trigger. Message distributions overcomes this limitation by duplicating messages to all callbacks with matching filters, and if you have enhancements enabled, distributions will abide by those set enhancements to ensure a wanted frame is accepted and not others.
 
+16) background hooks for the thread and frame outputs so external libraries could use without any configurations between them.
+
   Typical usage:
 ```
 //Header:
