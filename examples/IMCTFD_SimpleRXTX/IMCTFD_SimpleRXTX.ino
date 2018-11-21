@@ -26,7 +26,6 @@ void setup() {
   // enable callback
   myFD.onReceive(myCB);
 }
-#include "TeensyThreads.h"
 
 void loop() {
   delay(500);
