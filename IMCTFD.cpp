@@ -73,7 +73,7 @@ IMCTFD::IMCTFD(SPIClass& _port, uint8_t _miso, uint8_t _mosi, uint8_t _sck, uint
 }
 
 void IMCTFD::process() {
-#if !defined(KINETISL)
+#if defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__)
   while(1) {
 #endif
     for ( uint8_t i = 0; i < _totalObjects; i++ ) {
@@ -85,11 +85,8 @@ void IMCTFD::process() {
     }
 #if defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__)
     threads.yield();
-#endif
-#if !defined(KINETISL)
   }
-#endif
-#if defined(KINETISL)
+#else
   IMCTFD::IMCTFD_routines();
 #endif
 }
@@ -102,7 +99,7 @@ uint16_t __attribute__((weak)) IMCTFD_events() {
 }
 
 void IMCTFD::IMCTFD_routines() {
-#if !defined(KINETISL)
+#if defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__)
   while(1) {
 #endif
     if ( rxBuffer.size() ) {
@@ -116,8 +113,6 @@ void IMCTFD::IMCTFD_routines() {
     IMCTFD_events();
 #if defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__)
     threads.yield();
-#endif
-#if !defined(KINETISL)
   }
 #endif
 }
@@ -819,6 +814,9 @@ int IMCTFD::write(const CANFD_message_t &msg, IMCTFD_CANFD_FIFO_CHANNELS channel
     }
     if ( !found ) return 0;
     channel = (IMCTFD_CANFD_FIFO_CHANNELS)spread_writes;
+    if ( _getBit(cREGADDR_CiFIFOSTA, 3) ) { /* clear overflow flag if set */
+      _setBit(cREGADDR_CiFIFOSTA, 3, 0);
+    }
   }
   else if ( channel == TXQ ) {
     if ( !_getBit(cREGADDR_CiCON, 20) ) return 0; /* TXQ is disabled */
@@ -827,6 +825,9 @@ int IMCTFD::write(const CANFD_message_t &msg, IMCTFD_CANFD_FIFO_CHANNELS channel
     uint32_t timeout = millis();
     while ( !_getBit(cREGADDR_CiTXQSTA, 0) ) { /* make sure it's not full */
       if ( millis() - timeout > 100 ) return 0;
+    }
+    if ( _getBit(cREGADDR_CiTEFSTA, 3) ) { /* clear overflow flag if set */
+      _setBit(cREGADDR_CiTEFSTA, 3, 0);
     }
   }
   else if ( channel == TEF ) return 0; /* TX only */
@@ -838,6 +839,9 @@ int IMCTFD::write(const CANFD_message_t &msg, IMCTFD_CANFD_FIFO_CHANNELS channel
     uint32_t timeout = millis();
     while ( !_getBit(cREGADDR_CiFIFOSTA + (channel * CiFIFO_OFFSET), 0) ) { /* wait till timeout if it's full */
       if ( millis() - timeout > 100 ) return 0;
+    }
+    if ( _getBit(cREGADDR_CiFIFOSTA, 3) ) { /* clear overflow flag if set */
+      _setBit(cREGADDR_CiFIFOSTA, 3, 0);
     }
   }
   uint16_t user_address = 0;
@@ -867,17 +871,11 @@ int IMCTFD::write(const CANFD_message_t &msg, IMCTFD_CANFD_FIFO_CHANNELS channel
     txqcon |= ((tx_interrupts & 1UL) ? (1UL << 2) : 0UL);
     txqcon |= (((tx_pending & 1UL) ? 1UL : 3UL ) << 8 );
     _writeWord(cREGADDR_CiTXQCON, txqcon);
-    if ( _getBit(cREGADDR_CiTEFSTA, 3) ) { /* clear overflow flag if set */
-      _setBit(cREGADDR_CiTEFSTA, 3, 0);
-    }
   }
   else {
     fifoCon |= ((tx_interrupts & (1UL << channel)) ? (1UL << 2) : 0UL );
     fifoCon |= (((tx_pending & (1UL << channel)) ? 1UL : 3UL ) << 8 );
     _writeWord(cREGADDR_CiFIFOCON + (channel * CiFIFO_OFFSET), fifoCon);
-    if ( _getBit(cREGADDR_CiFIFOSTA, 3) ) { /* clear overflow flag if set */
-      _setBit(cREGADDR_CiFIFOSTA, 3, 0);
-    }
   }
   return 1;
 }
