@@ -31,8 +31,15 @@
 #include "IMCTFD.h"
 #include "SPI.h"
 #include <algorithm>
+
+#if defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__)
 #include "TeensyThreads.h"
 Threads::Mutex SPI_LOCK[3];
+#endif
+
+#if defined(KINETISL)
+IntervalTimer IMCTFD_iTimer;
+#endif
 
 IMCTFD* IMCTFD::_threadObjects[4] = { nullptr };
 uint8_t IMCTFD::_totalObjects = 0;
@@ -57,14 +64,18 @@ IMCTFD::IMCTFD(SPIClass& _port, uint8_t _miso, uint8_t _mosi, uint8_t _sck, uint
   currentObject = _totalObjects;
   _threadObjects[_totalObjects++] = this;
   if ( port == &SPI ) spi_port_value = 0;
-#if !defined(__MK20DX256__)
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__) || defined(KINETISL)
   else if ( port == &SPI1 ) spi_port_value = 1;
+#endif
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
   else if ( port == &SPI2 ) spi_port_value = 2;
 #endif
 }
 
 void IMCTFD::process() {
+#if !defined(KINETISL)
   while(1) {
+#endif
     for ( uint8_t i = 0; i < _totalObjects; i++ ) {
       if ( _threadObjects[i] ) {
         if ( !digitalReadFast(_threadObjects[i]->interrupt)) {
@@ -72,8 +83,15 @@ void IMCTFD::process() {
         }
       }
     }
+#if defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__)
     threads.yield();
+#endif
+#if !defined(KINETISL)
   }
+#endif
+#if defined(KINETISL)
+  IMCTFD::IMCTFD_routines();
+#endif
 }
 
 void __attribute__((weak)) IMCTFD_output(const CANFD_message_t &msg) {
@@ -84,7 +102,9 @@ uint16_t __attribute__((weak)) IMCTFD_events() {
 }
 
 void IMCTFD::IMCTFD_routines() {
+#if !defined(KINETISL)
   while(1) {
+#endif
     if ( rxBuffer.size() ) {
       CANFD_message_t msg;
       uint8_t buf[sizeof(CANFD_message_t)];
@@ -94,8 +114,12 @@ void IMCTFD::IMCTFD_routines() {
       if ( _threadObjects[msg.objID]->_FIFOhandlers[msg.fifo] ) _threadObjects[msg.objID]->_FIFOhandlers[msg.fifo](msg);
     }
     IMCTFD_events();
+#if defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__)
     threads.yield();
+#endif
+#if !defined(KINETISL)
   }
+#endif
 }
 
 void IMCTFD::IMCTFD_isr() {
@@ -656,7 +680,9 @@ CAN_OPERATION_MODE IMCTFD::getOpMode() {
 void IMCTFD::reset() {
   /* The RESET instruction should only be issued after the device has entered Configuration mode. */
   if ( !setOpMode(CAN_CONFIGURATION_MODE) ) return;
-  //Threads::Scope scope(SPI_LOCK[spi_port_value]);
+#if defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__)
+  Threads::Scope scope(SPI_LOCK[spi_port_value]);
+#endif
   port->beginTransaction(settings);
   ::digitalWriteFast(cs,LOW);
   port->transfer16(cINSTRUCTION_RESET);
@@ -870,7 +896,10 @@ bool IMCTFD::setQueue(IMCTFD_CANFD_FIFO_CHANNELS channel, IMCTFD_WRITE_ACTION ac
 }
 
 void IMCTFD::_transfer(uint8_t *txData, uint8_t *rxData, uint16_t size) {
-  { Threads::Scope scope(SPI_LOCK[spi_port_value]);
+  {
+#if defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__)
+    Threads::Scope scope(SPI_LOCK[spi_port_value]);
+#endif
     port->beginTransaction(settings);
     ::digitalWriteFast(cs,LOW);
     for ( uint16_t i = 0; i < size; i++ ) (rxData) ? rxData[i] = port->transfer((txData) ? txData[i] : 0xFF) : port->transfer((txData) ? txData[i] : 0xFF); 
@@ -894,7 +923,10 @@ void IMCTFD::_transfer(uint16_t address, uint8_t *txData, uint8_t *rxData, uint1
       return;
     }
   }
-  { Threads::Scope scope(SPI_LOCK[spi_port_value]);
+  {
+#if defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__)
+    Threads::Scope scope(SPI_LOCK[spi_port_value]);
+#endif
     port->beginTransaction(settings);
     ::digitalWriteFast(cs,LOW);
     port->transfer16(address);
@@ -1313,6 +1345,7 @@ void IMCTFD::begin() {
   if ( !setOpMode(CAN_CONFIGURATION_MODE) ) return;
   uint32_t tefcon = _readWord(cREGADDR_CiTEFCON);
   uint32_t txqcon = _readWord(cREGADDR_CiTXQCON);
+  enableTimeStamping();
   uint32_t citscon = _readWord(cREGADDR_CiTSCON);
   uint32_t iocon = _readWord(cREGADDR_IOCON);
 
@@ -1336,12 +1369,12 @@ void IMCTFD::begin() {
   }
 
 /*
-•  Reset the MCP25xxFD
-•  Configure the Oscillator and CLKO pin
-•  Configure the I/O pins
-•  Configure the CAN Control register
-•  Configure the Bit Time registers
-•  Configure the TEF, TXQ, TX and RX FIFOs
+â€¢  Reset the MCP25xxFD
+â€¢  Configure the Oscillator and CLKO pin
+â€¢  Configure the I/O pins
+â€¢  Configure the CAN Control register
+â€¢  Configure the Bit Time registers
+â€¢  Configure the TEF, TXQ, TX and RX FIFOs
 */
 
   reset();
@@ -1400,9 +1433,15 @@ void IMCTFD::begin() {
 
   if ( !threading_started ) {
     threading_started = 1;
+#if defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__)
     uint8_t id = threads.addThread(IMCTFD::process);
     threads.setTimeSlice(id, 1000);
     id = threads.addThread(IMCTFD::IMCTFD_routines);
     threads.setTimeSlice(id, 20);
+#endif
+#if defined(KINETISL)
+    IMCTFD_iTimer.begin(IMCTFD::process, 25000);
+    IMCTFD_iTimer.priority(128);
+#endif
   }
 }
