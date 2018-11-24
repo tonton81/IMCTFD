@@ -27,11 +27,14 @@
   SOFTWARE.
 */
 
+#if !defined(_IMCTFD_H_)  // && ( defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__) )
+#define _IMCTFD_H_
+
 #include "Arduino.h"
 #include <SPI.h>
 #include "circular_buffer.h"
 
-#define IMCTFD_RX_BUFSIZE 128
+#define IMCTFD_RX_BUFSIZE 16
 
 /* SPI Instruction Set */
 #define cINSTRUCTION_RESET			0x00
@@ -341,9 +344,6 @@ typedef struct CANFD_message_t {
 
 typedef void (*_FIFO_ptr)(const CANFD_message_t &msg); /* fifo / global callback */
 
-#if !defined(_IMCTFD_H_) && ( defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__) )
-#define _IMCTFD_H_
-
 class IMCTFD {
 
   public:
@@ -406,6 +406,8 @@ class IMCTFD {
     uint8_t _readByte(uint16_t address); /* reads a byte to the chip at the specified address */
     void reset();
     void distribute(bool state = 1) { distribution = state; }
+    static void IMCTFD_routines(); /* currently for callbacks via queues */
+    static void process(); /* threading uses this static function to call the objects to process IMCTFD_isr() */
 
   private:
     SPIClass *port; /* SPI port used by the Object */
@@ -431,8 +433,6 @@ class IMCTFD {
     _FIFO_ptr _globalhandler = nullptr; /* global mailbox handler */
     uint8_t currentObject = 0; /* specifies a value used for a specific lock for each object, incremented by _totalObjects in constructor */
     void IMCTFD_isr(); /* threading based emulated isr, based on pin state */
-    static void IMCTFD_routines(); /* currently for callbacks via queues */
-    static void process(); /* threading uses this static function to call the objects to process IMCTFD_isr() */
     uint32_t overflow_flags = 0;
     volatile int distribution = 0;
     void packet_distribution(CANFD_message_t &msg);
