@@ -27,7 +27,7 @@
   SOFTWARE.
 */
 
-#if !defined(_IMCTFD_H_)  // && ( defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__) )
+#if !defined(_IMCTFD_H_)
 #define _IMCTFD_H_
 
 #include "Arduino.h"
@@ -441,16 +441,5 @@ class IMCTFD {
 
 extern void IMCTFD_output(const CANFD_message_t &msg);
 extern uint16_t IMCTFD_events();
-
-
-
-
-
-
-
-
-
-
-
 
 #endif
