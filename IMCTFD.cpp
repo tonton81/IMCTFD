@@ -79,6 +79,9 @@ void IMCTFD::process() {
     for ( uint8_t i = 0; i < _totalObjects; i++ ) {
       if ( _threadObjects[i] ) {
         if ( !digitalReadFast(_threadObjects[i]->interrupt)) {
+#if defined(KINETISL)
+          if ( _threadObjects[i]->busy_flag ) return;
+#endif
           _threadObjects[i]->IMCTFD_isr();
         }
       }
@@ -814,20 +817,15 @@ int IMCTFD::write(const CANFD_message_t &msg, IMCTFD_CANFD_FIFO_CHANNELS channel
     }
     if ( !found ) return 0;
     channel = (IMCTFD_CANFD_FIFO_CHANNELS)spread_writes;
-    if ( _getBit(cREGADDR_CiFIFOSTA, 3) ) { /* clear overflow flag if set */
-      _setBit(cREGADDR_CiFIFOSTA, 3, 0);
-    }
   }
   else if ( channel == TXQ ) {
     if ( !_getBit(cREGADDR_CiCON, 20) ) return 0; /* TXQ is disabled */
+    _setBit(cREGADDR_CiTXQSTA, 3, 0); /* clear overflow flag if set */
     uint32_t txqcon = _readWord(cREGADDR_CiTXQCON);
     if ( _DLC > conversionsDLC(4, (txqcon & 0xE0000000) >> 29, msg.fdf) ) return 0; /* make sure it fits hardware queue */
     uint32_t timeout = millis();
     while ( !_getBit(cREGADDR_CiTXQSTA, 0) ) { /* make sure it's not full */
       if ( millis() - timeout > 100 ) return 0;
-    }
-    if ( _getBit(cREGADDR_CiTEFSTA, 3) ) { /* clear overflow flag if set */
-      _setBit(cREGADDR_CiTEFSTA, 3, 0);
     }
   }
   else if ( channel == TEF ) return 0; /* TX only */
@@ -840,13 +838,13 @@ int IMCTFD::write(const CANFD_message_t &msg, IMCTFD_CANFD_FIFO_CHANNELS channel
     while ( !_getBit(cREGADDR_CiFIFOSTA + (channel * CiFIFO_OFFSET), 0) ) { /* wait till timeout if it's full */
       if ( millis() - timeout > 100 ) return 0;
     }
-    if ( _getBit(cREGADDR_CiFIFOSTA, 3) ) { /* clear overflow flag if set */
-      _setBit(cREGADDR_CiFIFOSTA, 3, 0);
-    }
   }
   uint16_t user_address = 0;
   if ( channel == TXQ ) user_address = _readWord(cREGADDR_CiTXQUA) + cRAMADDR_START;
-  else user_address = (((uint16_t)(cINSTRUCTION_WRITE << 12)) | (_readWord(cREGADDR_CiFIFOUA + (channel * CiFIFO_OFFSET)) + cRAMADDR_START)) & 0xFFF;
+  else {
+    _setBit(cREGADDR_CiFIFOSTA + (channel * CiFIFO_OFFSET), 3, 0); /* clear overflow flag if set */
+    user_address = (((uint16_t)(cINSTRUCTION_WRITE << 12)) | (_readWord(cREGADDR_CiFIFOUA + (channel * CiFIFO_OFFSET)) + cRAMADDR_START)) & 0xFFF;
+  }
   uint32_t config = conversionsDLC(1, _DLC, msg.fdf) | msg.fdf << 7 | msg.brs << 6 | msg.flags.remote << 5 | msg.flags.extended << 4;
   config |= ((msg.sequence & 0x7F) << 9);
   uint8_t txBuffer[_DLC + 8] = { 0 };
@@ -895,6 +893,7 @@ bool IMCTFD::setQueue(IMCTFD_CANFD_FIFO_CHANNELS channel, IMCTFD_WRITE_ACTION ac
 
 void IMCTFD::_transfer(uint8_t *txData, uint8_t *rxData, uint16_t size) {
   {
+    busy_flag = 1;
 #if defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__)
     Threads::Scope scope(SPI_LOCK[spi_port_value]);
 #endif
@@ -903,6 +902,7 @@ void IMCTFD::_transfer(uint8_t *txData, uint8_t *rxData, uint16_t size) {
     for ( uint16_t i = 0; i < size; i++ ) (rxData) ? rxData[i] = port->transfer((txData) ? txData[i] : 0xFF) : port->transfer((txData) ? txData[i] : 0xFF); 
     ::digitalWriteFast(cs,HIGH);
     port->endTransaction();
+    busy_flag = 0;
   }
 }
 
@@ -925,12 +925,14 @@ void IMCTFD::_transfer(uint16_t address, uint8_t *txData, uint8_t *rxData, uint1
 #if defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__)
     Threads::Scope scope(SPI_LOCK[spi_port_value]);
 #endif
+    busy_flag = 1;
     port->beginTransaction(settings);
     ::digitalWriteFast(cs,LOW);
     port->transfer16(address);
     for ( uint16_t i = 0; i < size; i++ ) (rxData) ? rxData[i] = port->transfer((txData) ? txData[i] : 0xFF) : port->transfer((txData) ? txData[i] : 0xFF); 
     ::digitalWriteFast(cs,HIGH);
     port->endTransaction();
+    busy_flag = 0;
   }
 }
 
