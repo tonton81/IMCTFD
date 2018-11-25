@@ -437,6 +437,7 @@ class IMCTFD {
     volatile int distribution = 0;
     void packet_distribution(CANFD_message_t &msg);
     bool init_filters = 0;
+    volatile uint32_t busy_flag = 0; /* used for LC since threads/mutexes are not used */
 };
 
 extern void IMCTFD_output(const CANFD_message_t &msg);
