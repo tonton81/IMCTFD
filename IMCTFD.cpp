@@ -78,10 +78,10 @@ void IMCTFD::process() {
 #endif
     for ( uint8_t i = 0; i < _totalObjects; i++ ) {
       if ( _threadObjects[i] ) {
-        if ( !digitalReadFast(_threadObjects[i]->interrupt)) {
 #if defined(KINETISL)
-          if ( _threadObjects[i]->busy_flag ) return;
+        if ( _threadObjects[i]->busy_flag ) return;
 #endif
+        if ( !digitalReadFast(_threadObjects[i]->interrupt)) {
           _threadObjects[i]->IMCTFD_isr();
         }
       }
